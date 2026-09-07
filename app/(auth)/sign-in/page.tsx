@@ -5,6 +5,12 @@ import { SignInForm } from './sign-in-form';
 
 export const metadata: Metadata = { title: 'Sign in' };
 
+// Never prerendered. This page reads the session cookie to decide where an
+// already-signed-in person belongs, so its output depends on the request. Left
+// as a static candidate, the build evaluates it with no environment configured
+// and fails there instead of at the request it was written for.
+export const dynamic = 'force-dynamic';
+
 export default async function SignInPage({
   searchParams,
 }: {
