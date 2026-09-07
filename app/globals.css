@@ -1,0 +1,293 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * Design tokens.
+ *
+ * The shell is described by three colours, matching Velozity Task Automation:
+ * a navy frame, a white content panel floating inside it, and a soft grey
+ * canvas that the page scrolls in. Dark mode is true black, so the sidebar
+ * becomes the only lifted surface and the page itself is #000 for OLED screens.
+ *
+ * The `--vz-*` variables are raw hex because they describe surfaces directly.
+ * Everything else stays as HSL channels, which is what the component library
+ * consumes via `hsl(var(--token))`.
+ */
+@layer base {
+  :root {
+    /* ---------------------------------------------------- app surfaces */
+    --vz-shell: #0f1730; /* outer frame, behind the content panel */
+    --vz-sidebar: #0f1730; /* the nav rail */
+    --vz-canvas: #f7f8fb; /* the scrolling page area */
+    --vz-hero-a: #141c38;
+    --vz-hero-b: #1b2545;
+    --vz-hero-c: #0f1730;
+
+    /* ------------------------------------------------------ brand ramp */
+    --brand-50: 225 100% 97%;
+    --brand-100: 224 100% 93%;
+    --brand-200: 223 100% 88%;
+    --brand-300: 223 100% 80%;
+    --brand-400: 226 94% 70%;
+    --brand-500: 231 84% 61%;
+    --brand-600: 232 74% 54%;
+    --brand-700: 233 63% 46%;
+    --brand-800: 234 60% 38%;
+    --brand-900: 234 53% 32%;
+
+    /* ---------------------------------------------------- semantic set */
+    --background: 225 33% 98%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 232 74% 54%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 40% 20%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 214 32% 94%;
+    --accent-foreground: 222 47% 15%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 56% 34%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 32 90% 44%;
+    --warning-foreground: 0 0% 100%;
+
+    --info: 214 84% 50%;
+    --info-foreground: 0 0% 100%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 232 74% 54%;
+
+    --sidebar: 226 52% 12%;
+    --sidebar-foreground: 215 20% 70%;
+    --sidebar-accent: 226 40% 20%;
+    --sidebar-border: 226 35% 22%;
+
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --vz-shell: #000000;
+    --vz-sidebar: #0a0a0a;
+    --vz-canvas: #000000;
+    --vz-hero-a: #101010;
+    --vz-hero-b: #0a0a0a;
+    --vz-hero-c: #000000;
+
+    /* True black, with a neutral ramp. A blue-tinted "slate" scale fights a
+       black ground and reads as a haze; these are deliberately achromatic. */
+    --background: 0 0% 0%;
+    --foreground: 0 0% 93%;
+
+    --card: 0 0% 4%;
+    --card-foreground: 0 0% 93%;
+
+    --popover: 0 0% 5%;
+    --popover-foreground: 0 0% 93%;
+
+    --primary: 226 94% 70%;
+    --primary-foreground: 226 52% 10%;
+
+    --secondary: 0 0% 10%;
+    --secondary-foreground: 0 0% 88%;
+
+    --muted: 0 0% 10%;
+    --muted-foreground: 0 0% 58%;
+
+    --accent: 0 0% 13%;
+    --accent-foreground: 0 0% 92%;
+
+    --destructive: 0 72% 58%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 48% 48%;
+    --success-foreground: 0 0% 4%;
+
+    --warning: 36 88% 58%;
+    --warning-foreground: 0 0% 4%;
+
+    --info: 214 88% 65%;
+    --info-foreground: 0 0% 4%;
+
+    --border: 0 0% 12%;
+    --input: 0 0% 14%;
+    --ring: 226 94% 70%;
+
+    --sidebar: 0 0% 4%;
+    --sidebar-foreground: 0 0% 66%;
+    --sidebar-accent: 0 0% 11%;
+    --sidebar-border: 0 0% 11%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  /* Tabular figures wherever a number is compared down a column. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Visible focus, always. Keyboard users are not second-class. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  ::selection {
+    @apply bg-primary/20;
+  }
+}
+
+@layer components {
+  /* --------------------------------------------------- scroll surfaces */
+
+  /* Scrolls, shows nothing. For the sidebar rail, where a scrollbar would sit
+     on top of the design; a fade at the foot signals "more below" instead. */
+  .vz-no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .vz-no-scrollbar::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
+  }
+
+  /* The track keeps its width so nothing shifts, but the thumb only appears
+     while the panel is hovered or actually being scrolled. */
+  .vz-quiet-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+  .vz-quiet-scroll:hover,
+  .vz-quiet-scroll.is-scrolling {
+    scrollbar-color: hsl(var(--muted-foreground) / 0.35) transparent;
+  }
+  .vz-quiet-scroll::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .vz-quiet-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .vz-quiet-scroll::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 999px;
+    transition: background 0.25s ease;
+  }
+  .vz-quiet-scroll:hover::-webkit-scrollbar-thumb,
+  .vz-quiet-scroll.is-scrolling::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.35);
+  }
+  /* The sidebar is dark whatever the theme, so its thumb is the light one. */
+  aside .vz-quiet-scroll:hover::-webkit-scrollbar-thumb,
+  aside .vz-quiet-scroll.is-scrolling::-webkit-scrollbar-thumb {
+    background: rgb(255 255 255 / 0.2);
+  }
+
+  /* ------------------------------------------------------- the panel */
+
+  /* The content panel that floats inside the navy shell. */
+  .vz-panel {
+    @apply bg-card shadow-[0_20px_60px_-30px_rgba(0,0,0,0.5)];
+  }
+
+  /* The standard card shadow: a hairline lift plus a wide soft ground. */
+  .vz-card {
+    box-shadow:
+      0 1px 2px rgb(15 23 42 / 0.04),
+      0 8px 24px -16px rgb(15 23 42 / 0.12);
+  }
+  .dark .vz-card {
+    box-shadow:
+      0 1px 2px rgb(0 0 0 / 0.4),
+      0 8px 24px -16px rgb(0 0 0 / 0.7);
+  }
+
+  /* Loading placeholder. */
+  .skeleton {
+    @apply relative overflow-hidden rounded-lg bg-muted;
+  }
+  .skeleton::after {
+    @apply absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-black/[0.04] to-transparent;
+    content: '';
+  }
+  .dark .skeleton::after {
+    @apply via-white/[0.05];
+  }
+
+  /* Number inputs keep their spinners out of a data-dense form. */
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+}
+
+@layer utilities {
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .animate-fade-up {
+    animation: fade-up 0.25s ease-out both;
+  }
+
+  /* Staggers a list so rows arrive in sequence rather than all at once. */
+  .stagger > * {
+    animation: fade-up 0.25s ease-out both;
+  }
+  .stagger > *:nth-child(1) { animation-delay: 0ms; }
+  .stagger > *:nth-child(2) { animation-delay: 30ms; }
+  .stagger > *:nth-child(3) { animation-delay: 60ms; }
+  .stagger > *:nth-child(4) { animation-delay: 90ms; }
+  .stagger > *:nth-child(5) { animation-delay: 120ms; }
+  .stagger > *:nth-child(6) { animation-delay: 150ms; }
+  .stagger > *:nth-child(n + 7) { animation-delay: 180ms; }
+
+  /* Anyone who has asked for less motion gets none of it. */
+  @media (prefers-reduced-motion: reduce) {
+    .animate-fade-up,
+    .stagger > * {
+      animation: none;
+    }
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}

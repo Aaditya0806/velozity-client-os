@@ -1,0 +1,30 @@
+{
+  "//": [
+    "Used only by the standalone Node scripts (worker, migrate, seed, doctor).",
+    "",
+    "Deliberately does NOT extend tsconfig.json. tsx resolves `extends` with",
+    "Array.prototype.toReversed(), which does not exist before Node 20, and these",
+    "scripts must run on the Node version the project supports.",
+    "",
+    "Its only real job is the `server-only` mapping: that package is a Next",
+    "build-time guard resolved inside a Next build, and these processes run",
+    "outside one. The app keeps the real guard, because Next reads tsconfig.json."
+  ],
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"],
+      "server-only": ["./scripts/stubs/server-only.ts"]
+    }
+  },
+  "include": ["scripts/**/*.ts", "lib/**/*.ts", "supabase/**/*.ts"]
+}
