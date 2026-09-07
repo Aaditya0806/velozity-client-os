@@ -245,7 +245,8 @@ supabase/
   migrations/           the schema, in order
   seed/                 development data
 tests/
-  unit/ integration/ e2e/
+  unit/ integration/ e2e/   vitest, against PGlite
+  browser/                  Playwright, against the running app
 ```
 
 ---
@@ -258,12 +259,30 @@ npm run test:unit
 npm run test:integration
 npm run test:e2e
 npm run test:watch
+
+npm run test:browser        # Playwright, needs a running app and real credentials
+npm run test:browser:ui     # the same, in Playwright's inspector
 ```
 
-**176 tests**, running against real PostgreSQL. RLS policies, triggers and
+```bash
+npm run db:portal-demo      # give the demo tenant's contacts portal logins
+```
+
+`db:seed` refuses to run twice and `db:reset` throws everything away, so an
+existing demo tenant had no way to acquire the portal users the seed now
+creates. This tops them up. It is additive and idempotent, and it needs a
+working `SUPABASE_SERVICE_ROLE_KEY`.
+
+**278 tests**, running against real PostgreSQL. RLS policies, triggers and
 constraints under test are the same ones that run in production — a test that
 proves one tenant cannot read another's data proves it against real policy
 evaluation, not a mock.
+
+A further **29 browser tests** run against the real application — a real Next
+server, the real Supabase project, the seeded demo tenant. They are separate
+from `npm test` because they need credentials and a running app, and because
+they answer a different question: not whether the logic is right, but whether
+the page a person opens actually works.
 
 | Suite | Covers |
 |---|---|
@@ -276,10 +295,28 @@ evaluation, not a mock.
 | `security` | Every attack the specification names, performed and refused |
 | `seed` | The seed runs and produces coherent data |
 | `happy-path` (e2e) | Lead → qualified → proposal → won → NDA → e-sign → MSA → payment → onboarding → project |
+| `browser/hydration` | Every route renders **and hydrates**; no console error, uncaught exception or failed chunk |
+| `browser/navigation` | Client-side routing, the active marker, the rail preference surviving a reload |
+| `browser/interaction` | New deal, New client, the command bar, the AI page's configuration states |
+| `browser/sign-in` | Accepts valid credentials, rejects wrong ones, redirects the unauthenticated |
+| `browser/automations` | Builds, saves and deletes a real automation through the UI |
+| `portal-isolation` | A client sees their own company and nothing else; cost and margin are absent as columns |
+| `renewals` | The renewal state machine, and that a loss cannot be recorded without a reason |
+| `forecasting` | Weighted pipeline, and that unconvertible currency is excluded and counted |
+| `inbound-email` | Matching, deduplication, and that inbound mail can never become outbound |
+| `ses-provider` | The SES command, and configuration faults distinguished from transient ones |
+| `channel-providers` | Slack and WhatsApp request shape, and refusal to send WhatsApp without a template |
+| `automation-builder-meta` | The builder's form cannot drift from the engine's schema |
 
 The end-to-end test is the acceptance criterion for the critical workflow. It
 substitutes only object storage (an in-memory map); hashing, versioning and
 immutability run unchanged.
+
+The browser suite exists because passing logic tests are compatible with a
+completely broken application. A stale build once left every page rendering
+correctly and responding to nothing — React never attached, every button was
+inert — and all 182 logic tests passed throughout. So the browser tests do not
+check that markup exists; they click something and require a response.
 
 ---
 

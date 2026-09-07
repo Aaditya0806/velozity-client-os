@@ -141,18 +141,129 @@ export const resendProvider: EmailProvider = {
 // -----------------------------------------------------------------------------
 // AWS SES
 // -----------------------------------------------------------------------------
+
+/**
+ * The SES client, built once per region and imported only when SES is actually
+ * the configured provider.
+ *
+ * The AWS SDK is large and the default provider is `noop`, so a static import
+ * would load it into every process that touches this module — including the
+ * worker and every request path that sends nothing at all.
+ */
+const sesClients = new Map<string, import('@aws-sdk/client-sesv2').SESv2Client>();
+
+async function sesClient(region: string) {
+  const existing = sesClients.get(region);
+  if (existing) return existing;
+
+  const { SESv2Client } = await import('@aws-sdk/client-sesv2');
+  const env = serverEnv();
+
+  // Explicit credentials when given; otherwise the SDK's own chain, which is
+  // what an IAM task role or instance profile relies on. Passing undefined
+  // credentials would disable that chain rather than fall back to it.
+  const client = new SESv2Client({
+    region,
+    ...(env.AWS_ACCESS_KEY_ID && env.AWS_SECRET_ACCESS_KEY
+      ? {
+          credentials: {
+            accessKeyId: env.AWS_ACCESS_KEY_ID,
+            secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
+          },
+        }
+      : {}),
+  });
+
+  sesClients.set(region, client);
+  return client;
+}
+
 export const sesProvider: EmailProvider = {
   name: 'ses',
 
-  async send(): Promise<SendResult> {
-    // Intentionally not implemented: shipping a hand-rolled SigV4 signer would
-    // be a liability next to the AWS SDK. The interface is here so adding SES is
-    // a matter of installing @aws-sdk/client-sesv2 and filling this in - no
-    // caller changes.
-    throw new AppError(
-      'PROVIDER_UNAVAILABLE',
-      'The SES provider is not implemented. Install @aws-sdk/client-sesv2 and complete lib/email/providers.ts, or use Resend.',
-    );
+  async send(email: OutboundEmail): Promise<SendResult> {
+    const env = serverEnv();
+    if (!env.AWS_SES_REGION) {
+      throw new AppError('PROVIDER_UNAVAILABLE', 'AWS_SES_REGION is not configured.');
+    }
+
+    const client = await sesClient(env.AWS_SES_REGION);
+    const { SendEmailCommand } = await import('@aws-sdk/client-sesv2');
+
+    // SES v2 rejects an empty array where Resend ignores one, so every optional
+    // list is omitted rather than sent empty.
+    const destination = {
+      ToAddresses: email.to.map(formatAddress),
+      ...(email.cc?.length ? { CcAddresses: email.cc.map(formatAddress) } : {}),
+      ...(email.bcc?.length ? { BccAddresses: email.bcc.map(formatAddress) } : {}),
+    };
+
+    try {
+      const response = await client.send(
+        new SendEmailCommand({
+          FromEmailAddress: formatAddress(email.from),
+          Destination: destination,
+          ...(email.replyTo ? { ReplyToAddresses: [formatAddress(email.replyTo)] } : {}),
+          Content: {
+            Simple: {
+              Subject: { Data: email.subject, Charset: 'UTF-8' },
+              Body: {
+                Html: { Data: email.html, Charset: 'UTF-8' },
+                ...(email.text ? { Text: { Data: email.text, Charset: 'UTF-8' } } : {}),
+              },
+              ...(email.headers
+                ? {
+                    Headers: Object.entries(email.headers).map(([Name, Value]) => ({
+                      Name,
+                      Value,
+                    })),
+                  }
+                : {}),
+            },
+          },
+          // SES surfaces these on every event for the message, which is how a
+          // webhook finds its way back to our row. Tag values are restricted to
+          // letters, digits, underscore and hyphen — a UUID qualifies, anything
+          // else is dropped rather than sent and rejected.
+          ...(email.referenceId && /^[A-Za-z0-9_-]+$/.test(email.referenceId)
+            ? { EmailTags: [{ Name: 'reference', Value: email.referenceId }] }
+            : {}),
+          ...(env.SES_CONFIGURATION_SET
+            ? { ConfigurationSetName: env.SES_CONFIGURATION_SET }
+            : {}),
+        }),
+      );
+
+      if (!response.MessageId) {
+        throw new AppError('PROVIDER_ERROR', 'SES accepted the message but returned no id.');
+      }
+
+      return { providerMessageId: response.MessageId, accepted: true, raw: response };
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+
+      const name = error instanceof Error ? error.name : '';
+      logger.error('SES rejected a message', { name, error });
+
+      // A sender identity that has not been verified, or an account still in
+      // the sandbox, is a configuration fault rather than a transient one, and
+      // retrying it forever would bury the real cause.
+      if (
+        name === 'MessageRejected' ||
+        name === 'MailFromDomainNotVerifiedException' ||
+        name === 'AccountSuspendedException'
+      ) {
+        throw new AppError(
+          'PROVIDER_UNAVAILABLE',
+          `SES refused the message (${name}). Verify the sender identity in the SES console, and check whether the account is still in the sandbox.`,
+          { cause: error },
+        );
+      }
+
+      throw new AppError('PROVIDER_ERROR', 'The email provider rejected the message.', {
+        cause: error,
+      });
+    }
   },
 
   verifyWebhook(rawBody: Buffer, headers: Headers): WebhookVerification {

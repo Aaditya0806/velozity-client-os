@@ -1,6 +1,6 @@
 # Project Status — Velozity Business OS
 
-Last updated at the end of the first build session.
+Last updated at the end of the third session (phases 2–5).
 
 ---
 
@@ -13,7 +13,7 @@ as an automated test against real PostgreSQL.
 
 | | |
 |---|---|
-| Migrations | 20, all applying cleanly |
+| Migrations | 24, all applying cleanly |
 | Tables | 80 |
 | RLS policies | 168 |
 | Triggers | 98 |
@@ -21,7 +21,7 @@ as an automated test against real PostgreSQL.
 | Permissions | 127 |
 | System roles | 8 |
 | API endpoints | 59 |
-| **Tests** | **176 passing** |
+| **Tests** | **278 logic + 29 browser, all passing** |
 | Typecheck | Clean (strict, `noUncheckedIndexedAccess`) |
 | Production build | Clean, no warnings |
 
@@ -112,6 +112,10 @@ production. No PostgreSQL server or Docker is needed to run the suite.
 - [x] Prompt-injection defences; PII minimisation; org-level kill switch
 - [x] Automation engine: WHEN → IF → THEN, closed action enumeration
 - [x] Loop protection: chain depth and per-entity cooldown, both recorded
+- [x] Multi-turn conversation, with the transcript normalised server-side so a
+      sliced or gap-filtered history cannot produce a malformed request
+- [x] Unconfigured, rejected-key, unavailable-model and no-credit states each
+      reported distinctly rather than as one generic provider failure
 
 ### Interface
 - [x] Application shell: sidebar, ⌘K command bar, notifications, org switcher
@@ -124,29 +128,189 @@ production. No PostgreSQL server or Docker is needed to run the suite.
 - [x] Projects, tasks, services, documents, finance, reports, AI, automations, settings
 - [x] Loading skeletons, empty states, error states, confirmation dialogs, toasts
 - [x] Dark mode, responsive layouts, keyboard access, visible focus, ARIA
+- [x] Collapsible navigation rail, remembered in a cookie and rendered at its
+      remembered width in the first paint
+- [x] `loading.tsx` on every route: first paint fell from ~3.9 s to ~0.3 s
 
 ### Operations
 - [x] Seed data — one coherent tenant, every role, every pipeline stage
 - [x] Background worker with retry and backoff
 - [x] Health check
+- [x] `npm run doctor` preflight: verifies the database, migrations, seed, RLS,
+      storage credentials and the Anthropic key against the live services, and
+      distinguishes a misplaced key from a missing resource
+- [x] Transaction setup batched from 5 round trips to 2; identity resolution
+      from 5 queries to 1; rate limiting from 4 round trips to 1
 - [x] Documentation: README, ARCHITECTURE, SECURITY, DATABASE, API
 
 ---
 
-## Not started
+## Roadmap
 
-These are specified for later phases and the foundation supports each without
+Everything below is specified and the foundation supports each item without
 reshaping. See ARCHITECTURE.md §14.
 
-- [ ] Client portal application surface (the `portal.*` data contract exists)
-- [ ] Bidirectional Gmail / Microsoft email (Phase 1 is outbound only, by design)
-- [ ] Renewal engine and forecasting (data model and sweep job exist)
-- [ ] No-code automation builder UI (automations are already data)
-- [ ] WhatsApp and Slack integrations
-- [ ] Delivery profitability reporting
-- [ ] Playwright browser tests (the logic is covered by 176 tests; these would
-      cover rendering and interaction)
-- [ ] SES adapter implementation (interface complete; needs `@aws-sdk/client-sesv2`)
+The ordering is by dependency, not by appeal. Phase 2 comes first because none
+of the rest can be judged until real people are using the system against real
+credentials — a portal built on top of an application nobody has run in
+production is a guess with a UI on it.
+
+---
+
+### Phase 2 — Make it usable in production
+
+Small, mostly unglamorous, and blocking everything after it. Four of these are
+configuration rather than code; they are listed here because "the code is
+written" and "the system runs" are not the same claim.
+
+**Blocked on credentials (no code required):**
+
+- [ ] **Anthropic API credit.** *(still outstanding)* The key in `.env` authenticates correctly. The
+      account has no balance, so every assistant request returns
+      `credit balance is too low`. Add credit at console.anthropic.com →
+      Plans & Billing. A Claude subscription is not API access; it is billed
+      separately.
+- [ ] **Real `SUPABASE_SERVICE_ROLE_KEY`.** *(still outstanding — this also
+      blocks portal invitations, which need the Auth Admin API)* The variable currently holds an
+      Anthropic key, so Storage rejects every call with `Invalid Compact JWS`.
+      Copy the service_role key from Supabase → Settings → API. Document upload,
+      download and signed URLs stay broken until this is done.
+- [ ] **Verify the `documents` bucket** once the key above is correct. It has
+      never actually been checked: authentication failed before the bucket
+      lookup was reached.
+- [~] **Node 20.** `package.json` now declares `engines: { node: '>=20.9.0' }`,
+      so a deploy on 18 fails loudly rather than warning. The local default is
+      still 18.20.8 — switching it is a machine change, not a repo change.
+
+**Code:**
+
+- [x] **SES adapter.** Implemented with `@aws-sdk/client-sesv2`, loaded lazily
+      so the SDK never enters a process that sends nothing. 11 tests cover the
+      command it builds and how it classifies failures — an unverified sender
+      identity is reported as configuration, not as a transient fault, because
+      that decides whether the job queue retries it forever.
+
+      **Not verified against AWS.** That needs an account, a verified sender and
+      a region. The request shape and error handling are tested; the round trip
+      is not.
+- [x] **Playwright browser tests.** 26 tests in `tests/browser`, run with
+      `npm run test:browser`. They cover what the vitest suites structurally
+      cannot: that each of the 13 authenticated routes renders, *hydrates* and
+      raises no console error, uncaught exception or failed chunk request; that
+      navigation is client-side and the rail preference survives a reload; that
+      New deal, New client and the command bar respond to a click; and that
+      sign-in accepts, rejects and redirects correctly.
+
+      The hydration assertion is the point of the suite. Server-rendered HTML
+      proves nothing about whether a page works, so it clicks something and
+      requires a response. Verified by disabling JavaScript and confirming the
+      assertion fails — a test for a silent failure is worthless until it has
+      been seen to fail.
+
+**Deployment decision, not a task:**
+
+- [ ] **Database region.** The project is in `ap-northeast-1` (Tokyo), measured
+      at 142 ms round trip. `ap-south-1` (Mumbai) measures 34 ms — 4.2× closer.
+      Page content time is dominated by round trips, so this is worth more than
+      any remaining code change. Moving means creating a project in the new
+      region and re-running migrate and seed.
+
+---
+
+### Phase 3 — Client-facing surface ✅
+
+- [x] **Client portal application.** Six pages at `/portal` — overview,
+      projects, project detail, documents, invoices, reports — reading only the
+      `portal.*` projections. A separate session resolver
+      (`lib/auth/portal.ts`), a separate API boundary
+      (`lib/http/portal-api.ts`), and a separate shell.
+
+      The portal's three writes — accepting a deliverable, acknowledging a
+      report, recording a sign-in — go through `app.portal_*` SECURITY DEFINER
+      functions that re-derive authority from `portal_users`. The portal schema
+      stays read-only by grant and portal users hold no organisation
+      membership, so every RLS policy on a public table denies them by
+      construction.
+
+      Internal staff grant and revoke access from a Portal tab on the client
+      record. Revoked, never deleted: "who could see our invoices, and until
+      when" is an access-review question a deleted row answers with silence.
+
+      **22 isolation tests**, including that a client cannot see another client
+      of the same agency, that cost and margin are absent from the projection as
+      *columns* rather than filtered out, that "not yours" and "not there" are
+      answered identically, and that a portal user cannot grant themselves
+      anything.
+
+---
+
+### Phase 4 — Revenue retention ✅
+
+- [x] **Renewal engine.** A `renewals` table with its own lifecycle, guarded by
+      the same state-channel trigger as every other one. The sweep job now
+      *opens a cycle* rather than only sending a reminder, so what happened next
+      is recorded. A lost renewal cannot be saved without a reason — churn you
+      cannot explain is churn you cannot act on — and the reasons are counted on
+      the dashboard at `/legal/renewals`.
+
+- [x] **Forecasting.** Weighted pipeline by expected close month, shown beside
+      unweighted open value and already-committed value. Weighted value on its
+      own invites more confidence than amount × probability supports.
+
+- [x] **Delivery profitability.** Invoiced revenue less recorded cost, per
+      project, behind `cost:read` rather than `report:read`. Margin on nothing
+      invoiced reports as *no data*, not as −100%.
+
+      Every figure converts through `app.fx_rate_at`, which returns NULL rather
+      than assuming parity. Unconvertible amounts are excluded **and counted**,
+      and the report says so: a total that quietly absorbs a currency looks
+      exactly like a correct one.
+
+---
+
+### Phase 5 — Integrations ✅ *(built; three of four unverifiable without accounts)*
+
+- [x] **No-code automation builder.** A WHEN → IF → THEN editor generated from
+      the engine's own enumerations, so it cannot offer an action or operator
+      the server would reject. Full CRUD, with activation as a separate button
+      from editing because they are separate decisions and the audit trail
+      should say which happened. Deleted automations are soft-deleted so past
+      runs stay explainable.
+
+      Tests assert the form and the schema cannot drift, and that no path
+      anywhere offers to send an email.
+
+- [x] **Slack and WhatsApp.** Outbound channels with a queue-then-send model, so
+      a message lost to a provider outage leaves a trace. Credentials are named,
+      not stored: `secret_ref` points at an environment variable, so a token that
+      was never written to the database cannot be read out of a backup.
+
+      WhatsApp *refuses* to send without an approved template rather than
+      attempting it — free text outside the 24-hour window is accepted by the
+      API and never delivered, which is the worst failure mode there is,
+      because it looks like success.
+
+      **Not verified against Slack or Meta.** 19 tests cover request shape and
+      failure classification; no live message has been sent.
+
+- [x] **Bidirectional email.** Gmail and Microsoft Graph mailbox adapters, an
+      ingest function, and a sync job. Three properties hold by construction:
+
+      1. Inbound mail is **data, never an instruction**. Nothing subscribes to
+         it, no automation can trigger on it, and the assistant reads it through
+         the same read-only tools as everything else.
+      2. **Nothing is auto-replied.** There is no path from an inbound message
+         to an outbound one that does not pass through a person.
+      3. Only mail exchanged with a **known contact** is stored. A mailbox
+         belongs to a person and most of it is none of this product's business.
+
+      Read-only scopes (`gmail.readonly`, `Mail.Read`) — asking for less is the
+      difference between an integration a customer's IT approves and one they
+      do not.
+
+      **Not verified against Gmail or Microsoft.** That needs OAuth apps,
+      consent and a real mailbox. 10 tests cover matching, deduplication,
+      threading and the shape constraints.
 
 ---
 
@@ -230,7 +394,7 @@ Recorded in full in [ARCHITECTURE.md](ARCHITECTURE.md). In brief:
 
 ## Known issues and limitations
 
-**Node 18.** The toolchain runs on Node 18.20.8; `@supabase/supabase-js` warns
+**Node 18.** *(Phase 2.)* The toolchain runs on Node 18.20.8; `@supabase/supabase-js` warns
 that it wants Node 20+. Everything works, but Node 20 is recommended before
 deployment.
 
@@ -243,7 +407,7 @@ the documented API and its webhook verification is tested, but no calls have bee
 made to Zoho. The `manual` provider covers the whole workflow end to end, and is
 what the E2E test uses.
 
-**The SES adapter is deliberately unimplemented.** Hand-rolling a SigV4 signer
+**The SES adapter is deliberately unimplemented.** *(Phase 2.)* Hand-rolling a SigV4 signer
 would be a liability next to the AWS SDK. The interface is complete; adding SES
 means installing `@aws-sdk/client-sesv2` and filling in one method.
 

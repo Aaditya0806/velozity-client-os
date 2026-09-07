@@ -72,6 +72,20 @@ async function main() {
     );
   } else if (serviceKey === anonKey) {
     record('fail', 'SUPABASE_SERVICE_ROLE_KEY', 'This is the anon key, not the service role key.');
+  } else if (serviceKey.startsWith('sk-ant-')) {
+    // A key pasted into the wrong line is invisible until something far away
+    // fails for a reason that has nothing to do with the real cause.
+    record(
+      'fail',
+      'SUPABASE_SERVICE_ROLE_KEY',
+      'This is an Anthropic API key ("sk-ant-…"), not a Supabase key. It belongs in ANTHROPIC_API_KEY.',
+    );
+  } else if (!serviceKey.startsWith('eyJ') && !serviceKey.startsWith('sb_secret_')) {
+    record(
+      'fail',
+      'SUPABASE_SERVICE_ROLE_KEY',
+      'Not a Supabase secret key. Expected a JWT beginning "eyJ" or a key beginning "sb_secret_". Supabase → Settings → API.',
+    );
   } else {
     record('ok', 'SUPABASE_SERVICE_ROLE_KEY', 'set');
   }
@@ -241,6 +255,20 @@ async function main() {
         } else {
           record('ok', `Storage bucket "${bucket}"`, 'exists and is private');
         }
+      } else if (
+        response.status === 400 ||
+        response.status === 401 ||
+        response.status === 403
+      ) {
+        // Storage answers a bad credential with the same shape as a missing
+        // bucket, and reporting "create a bucket" when the key is wrong sends
+        // the operator to build something that already exists.
+        const detail = (await response.text()).slice(0, 200);
+        record(
+          'fail',
+          'Storage credentials',
+          `SUPABASE_SERVICE_ROLE_KEY was rejected (HTTP ${response.status}): ${detail} The bucket was not checked. Copy the service_role key from Supabase → Settings → API.`,
+        );
       } else {
         // Say which buckets DO exist: the usual cause is a bucket created under
         // a different name, and guessing wastes more time than one extra call.
@@ -275,13 +303,67 @@ async function main() {
   }
 
   // --- Optional integrations ----------------------------------------------
-  record(
-    process.env.ANTHROPIC_API_KEY ? 'ok' : 'warn',
-    'AI',
-    process.env.ANTHROPIC_API_KEY
-      ? `enabled (${process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-5'})`
-      : 'ANTHROPIC_API_KEY not set. AI features report that they are unconfigured; nothing else changes.',
-  );
+  // A key that is present is not the same as a key that works. This asks the
+  // provider, because the alternative is discovering a rejected key from a
+  // failed question in the UI, where the cause is far less obvious.
+  const aiModel = process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-5';
+  if (!process.env.ANTHROPIC_API_KEY) {
+    record(
+      'warn',
+      'AI',
+      'ANTHROPIC_API_KEY not set. The AI page says so and offers a link; nothing else changes.',
+    );
+  } else if (!process.env.ANTHROPIC_API_KEY.startsWith('sk-ant-')) {
+    record(
+      'fail',
+      'AI',
+      'ANTHROPIC_API_KEY does not look like an Anthropic key (expected "sk-ant-…"). A Claude subscription is not an API key: API access is billed separately at console.anthropic.com.',
+    );
+  } else {
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': process.env.ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+        },
+        // One token is the cheapest request that still exercises the key and
+        // the model name together.
+        body: JSON.stringify({
+          model: aiModel,
+          max_tokens: 1,
+          messages: [{ role: 'user', content: 'hi' }],
+        }),
+        signal: AbortSignal.timeout(15_000),
+      });
+
+      if (response.ok) {
+        record('ok', 'AI', `key accepted, model "${aiModel}" available`);
+      } else {
+        const detail = (await response.text()).slice(0, 300);
+        if (response.status === 401 || response.status === 403) {
+          record(
+            'fail',
+            'AI',
+            `ANTHROPIC_API_KEY was rejected (HTTP ${response.status}): ${detail} The key is well-formed, so it has most likely been revoked, deleted, or belongs to another account. Issue a fresh one at console.anthropic.com/settings/keys.`,
+          );
+        } else if (response.status === 404) {
+          record('fail', 'AI', `Model "${aiModel}" is not available to this key. Set ANTHROPIC_MODEL to one your account can use.`);
+        } else if (response.status === 400 && /credit|balance|quota/i.test(detail)) {
+          record('fail', 'AI', 'The Anthropic account has no available credit. Add credit at console.anthropic.com.');
+        } else {
+          record('warn', 'AI', `Unexpected response (HTTP ${response.status}): ${detail}`);
+        }
+      }
+    } catch (error) {
+      record(
+        'warn',
+        'AI',
+        `Could not reach the Anthropic API: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
 
   const emailProvider = process.env.EMAIL_PROVIDER ?? 'noop';
   record(

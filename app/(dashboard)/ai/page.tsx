@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
-import { Sparkles, ShieldCheck } from 'lucide-react';
+import { Sparkles, ShieldCheck, KeyRound } from 'lucide-react';
 import { requireContext, query } from '@/lib/auth/session';
+import { serverEnv } from '@/lib/config/env';
 import { PageHeader } from '@/components/layout/page-header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -25,6 +26,10 @@ export default async function AiPage() {
       </div>
     );
   }
+
+  // Read on the server: whether a key exists is an operator fact, and the key
+  // itself must never be serialised into a prop.
+  const configured = Boolean(serverEnv().ANTHROPIC_API_KEY);
 
   const pending = ctx.permissions.has('ai:read:org')
     ? await query(
@@ -67,7 +72,35 @@ export default async function AiPage() {
         </CardContent>
       </Card>
 
-      {ctx.permissions.has('ai:use:org') ? <Assistant /> : null}
+      {!configured ? (
+        <Card className="border-[hsl(var(--warning))]/40 bg-[hsl(var(--warning))]/[0.04]">
+          <CardContent className="flex items-start gap-3 p-4">
+            <KeyRound
+              className="mt-0.5 h-4 w-4 shrink-0 text-[hsl(var(--warning))]"
+              aria-hidden
+            />
+            <div className="text-sm">
+              <p className="font-medium">The assistant needs an Anthropic API key</p>
+              <p className="mt-1 text-muted-foreground">
+                Create a key at{' '}
+                <a
+                  href="https://console.anthropic.com/settings/keys"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium text-primary underline underline-offset-2"
+                >
+                  console.anthropic.com
+                </a>
+                , put it in <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">.env</code>{' '}
+                as <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">ANTHROPIC_API_KEY</code>,
+                then restart the server. Everything else on this page keeps working without it.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {ctx.permissions.has('ai:use:org') ? <Assistant configured={configured} /> : null}
 
       {ctx.permissions.has('ai:read:org') ? (
         <Card>

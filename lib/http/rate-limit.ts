@@ -7,7 +7,6 @@
  * behind the same interface if volume ever justifies one.
  */
 import type { Tx } from '@/lib/db';
-import { withService } from '@/lib/db';
 import { AppError } from '@/lib/http/errors';
 
 export interface RateLimitRule {
@@ -33,30 +32,40 @@ export async function checkRateLimit(
 ): Promise<void> {
   if (process.env.RATE_LIMIT_ENABLED === 'false') return;
 
-  const run = async (t: Tx) => {
-    const windowStart = new Date(
-      Math.floor(Date.now() / (rule.windowSeconds * 1000)) * rule.windowSeconds * 1000,
-    );
+  const windowStart = new Date(
+    Math.floor(Date.now() / (rule.windowSeconds * 1000)) * rule.windowSeconds * 1000,
+  );
 
-    const row = await t.one<{ hits: number }>(
-      `insert into rate_limit_counters (bucket, subject, window_start, hits)
-       values ($1, $2, $3, 1)
-       on conflict (bucket, subject, window_start)
-       do update set hits = rate_limit_counters.hits + 1
-       returning hits`,
-      [rule.key, subject, windowStart.toISOString()],
-    );
+  const sql = `insert into rate_limit_counters (bucket, subject, window_start, hits)
+               values ($1, $2, $3, 1)
+               on conflict (bucket, subject, window_start)
+               do update set hits = rate_limit_counters.hits + 1
+               returning hits`;
+  const params = [rule.key, subject, windowStart.toISOString()];
 
-    if (row.hits > rule.limit) {
-      throw new AppError('RATE_LIMITED', 'Too many requests. Please slow down.', {
-        details: { limit: rule.limit, window_seconds: rule.windowSeconds },
-      });
-    }
-  };
+  let hits: number;
 
   if (tx) {
-    await run(tx);
+    hits = (await tx.one<{ hits: number }>(sql, params)).hits;
   } else {
-    await withService('rate limit check', run);
+    // One round trip, not four.
+    //
+    // Wrapping this in withService() would cost BEGIN, SET LOCAL ROLE,
+    // set_config and COMMIT before the single statement that does the work —
+    // and it runs on every request. Against a database in another region that
+    // was more than half a second of pure overhead per call.
+    //
+    // No transaction is needed: it is one atomic upsert. No role switch is
+    // needed either, because rate_limit_counters holds no tenant data and is
+    // already granted to service_role alone, with RLS enabled and no policy.
+    const { pgDriver } = await import('@/lib/db/pool');
+    const result = await pgDriver.query<{ hits: number }>(sql, params);
+    hits = result.rows[0]?.hits ?? 0;
+  }
+
+  if (hits > rule.limit) {
+    throw new AppError('RATE_LIMITED', 'Too many requests. Please slow down.', {
+      details: { limit: rule.limit, window_seconds: rule.windowSeconds },
+    });
   }
 }

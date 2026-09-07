@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
   Users, GitBranch, Package, FolderKanban, CheckSquare, FileText, Scale,
-  Mail, BarChart3, Wallet, History, LayoutGrid,
+  Mail, BarChart3, Wallet, History, LayoutGrid, KeyRound,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,6 +16,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { formatMoney, formatDate, formatRelative } from '@/lib/util/format';
 import { ClientTimeline } from './client-timeline';
 import { ClientBilling } from './client-billing';
+import { PortalAccess } from './portal-access';
 
 interface Overview {
   company: Record<string, unknown>;
@@ -47,6 +48,7 @@ const TABS = [
   { value: 'emails', label: 'Emails', icon: Mail },
   { value: 'reports', label: 'Reports', icon: BarChart3 },
   { value: 'billing', label: 'Billing', icon: Wallet, permission: 'finance:read:org' },
+  { value: 'portal', label: 'Portal', icon: KeyRound },
   { value: 'activity', label: 'Activity', icon: History },
 ] as const;
 
@@ -213,6 +215,17 @@ export function ClientTabs({
             </Card>
           </div>
         </div>
+      </TabsContent>
+
+      <TabsContent value="portal">
+        <PortalAccess
+          clientId={clientId}
+          canManage={
+            held.has('company:update:org') ||
+            held.has('company:update:team') ||
+            held.has('company:update:own')
+          }
+        />
       </TabsContent>
 
       <TabsContent value="contacts">

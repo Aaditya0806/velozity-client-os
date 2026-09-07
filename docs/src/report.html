@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Velozity Business OS — Delivery Report</title>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div class="cover">
+  <div class="brand">
+    <span class="mark">V</span>
+    <span class="name">Velozity Business OS</span>
+    <span class="tag">Delivery report</span>
+  </div>
+  <h1>Delivery report: phases 2–5</h1>
+  <p class="subtitle">Status, evidence, risks and what remains before production.</p>
+  <div class="meta">
+    <div><b>7 September 2026</b>Report date</div>
+    <div><b>Phases 2–5</b>Period covered</div>
+    <div><b>Aditya Malviya</b>Prepared for</div>
+    <div><b>Pre-production</b>Status</div>
+  </div>
+</div>
+
+<h2>Executive summary</h2>
+
+<p>All planned work for phases 2 through 5 is built, tested and merged. The
+platform now covers the full commercial lifecycle, gives clients their own
+portal, tracks renewals and profitability, and connects to Slack, WhatsApp,
+Gmail and Microsoft 365.</p>
+
+<p><b>The platform is not yet in production.</b> What remains is configuration and
+provider setup rather than development work.</p>
+
+<div class="stats">
+  <div class="stat"><div class="v">4</div><div class="k">Phases delivered</div></div>
+  <div class="stat"><div class="v">307</div><div class="k">Tests passing</div></div>
+  <div class="stat"><div class="v">0</div><div class="k">Known defects</div></div>
+  <div class="stat"><div class="v">96</div><div class="k">API endpoints</div></div>
+</div>
+
+<h2>What was delivered</h2>
+
+<table>
+  <thead>
+    <tr><th style="width:16%">Phase</th><th>Scope</th><th style="width:15%">Status</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><b>Phase&nbsp;2</b><br><span class="small muted">Production readiness</span></td>
+      <td>Amazon SES email provider; browser test suite; preflight diagnostics; performance work; runtime version pinned</td>
+      <td><span class="pill done">Complete</span><br><span class="small muted">Code complete; two credentials outstanding</span></td>
+    </tr>
+    <tr>
+      <td><b>Phase&nbsp;3</b><br><span class="small muted">Client portal</span></td>
+      <td>Six-screen client application; deliverable approval; per-person permissions; secure document delivery; invite and revoke</td>
+      <td><span class="pill done">Complete</span></td>
+    </tr>
+    <tr>
+      <td><b>Phase&nbsp;4</b><br><span class="small muted">Revenue retention</span></td>
+      <td>Renewal engine with mandatory loss reasons; retention reporting; pipeline forecast; delivery profitability</td>
+      <td><span class="pill done">Complete</span></td>
+    </tr>
+    <tr>
+      <td><b>Phase&nbsp;5</b><br><span class="small muted">Integrations</span></td>
+      <td>No-code automation builder; Slack; WhatsApp; Gmail and Microsoft 365 mailbox sync</td>
+      <td><span class="pill partial">Built</span><br><span class="small muted">Three of four not verified live</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Business impact</h2>
+
+<h3>The client portal changes what clients see</h3>
+<p>Clients can now follow their own projects, read published reports, download
+documents, see outstanding invoices and formally accept or reject deliverables —
+without emailing anyone. Deliverable acceptance in particular moves a
+conversation that usually lives in email into a recorded decision attributed to
+a named person on a specific date.</p>
+
+<h3>Renewals become a process rather than a reminder</h3>
+<p>Previously the system sent a notification when a contract was expiring and
+recorded nothing about what happened next. Every expiring contract now opens a
+renewal with an owner and an outcome, and <b>a lost renewal cannot be recorded
+without a reason.</b> Those reasons are counted, which turns churn from something
+observed into something that can be acted upon.</p>
+
+<h3>Profitability is visible per engagement</h3>
+<p>Invoiced revenue against recorded delivery cost, with hours used against
+estimate, for every project. Restricted to those permitted to see cost.</p>
+
+<h3>Automations no longer need a developer</h3>
+<p>Business users can now build their own rules. The editor is generated from
+the engine's own definitions, so it cannot produce a rule the system would
+reject.</p>
+
+<h2>Verification</h2>
+
+<p>307 automated tests pass. They fall into two kinds, which answer different
+questions.</p>
+
+<table>
+  <thead><tr><th>Suite</th><th class="num">Tests</th><th>What it proves</th></tr></thead>
+  <tbody>
+    <tr><td>Security</td><td class="num">38</td><td>Every attack named in the specification is performed and refused</td></tr>
+    <tr><td>AI guardrails</td><td class="num">34</td><td>The model cannot write; approval precedes execution; injection defences hold</td></tr>
+    <tr><td>End-to-end lifecycle</td><td class="num">25</td><td>Lead through to a provisioned project, in one run</td></tr>
+    <tr><td>Client portal isolation</td><td class="num">22</td><td>A client sees their own data and nothing else</td></tr>
+    <tr><td>Automation engine</td><td class="num">20</td><td>Conditions, cooldown, loop protection, and that no send action exists</td></tr>
+    <tr><td>Slack &amp; WhatsApp</td><td class="num">19</td><td>Request shape, and configuration faults distinguished from transient ones</td></tr>
+    <tr><td>Contract rendering</td><td class="num">13</td><td>Deterministic output; failure on a missing variable</td></tr>
+    <tr><td>Opportunity lifecycle</td><td class="num">12</td><td>Stage guards and the transition channel</td></tr>
+    <tr><td>Permission catalogue</td><td class="num">12</td><td>Code and database agree exactly on who may do what</td></tr>
+    <tr><td>Tenant isolation</td><td class="num">11</td><td>One customer cannot read another's data</td></tr>
+    <tr><td>Renewals</td><td class="num">11</td><td>The state machine, and that a loss must record a reason</td></tr>
+    <tr><td>Amazon SES</td><td class="num">11</td><td>The message it builds, and how it classifies failure</td></tr>
+    <tr><td>Seed data</td><td class="num">11</td><td>Demonstration data is coherent</td></tr>
+    <tr><td>Inbound email</td><td class="num">10</td><td>Matching, deduplication, and that inbound can never become outbound</td></tr>
+    <tr><td>Automation builder</td><td class="num">10</td><td>The editor cannot drift from what the engine accepts</td></tr>
+    <tr><td>Forecasting</td><td class="num">8</td><td>Weighted pipeline; unconvertible currency excluded and counted</td></tr>
+    <tr><td>Assistant conversation</td><td class="num">6</td><td>Multi-turn transcripts are always well formed</td></tr>
+    <tr><td>Navigation</td><td class="num">5</td><td>Exactly one section is highlighted at a time</td></tr>
+    <tr><td><b>Browser suite</b></td><td class="num"><b>29</b></td><td><b>Every page renders, loads and responds to a click in a real browser</b></td></tr>
+  </tbody>
+</table>
+
+<p>Tests run against genuine PostgreSQL, so the security policies under test are
+the ones that run in production. No database server or Docker is required.</p>
+
+<div class="panel ok">
+  <h4>Why the browser suite was added</h4>
+  <p>During this work a stale build left every page in the application rendering
+  perfectly and responding to nothing — every button was inert. All the logic
+  tests passed throughout, because rendered markup is not evidence that a page
+  works. The browser suite exists to close exactly that gap, and its central
+  assertion was itself verified by disabling JavaScript and confirming the test
+  fails. A test written for a silent failure is worthless until it has been seen
+  to fail.</p>
+</div>
+
+<h2>Defects found and fixed during this work</h2>
+
+<p>Four of these would have reached production and none were visible by
+inspection.</p>
+
+<table>
+  <thead><tr><th style="width:30%">Defect</th><th>Consequence had it shipped</th></tr></thead>
+  <tbody>
+    <tr><td>Currency conversion called with the wrong arguments</td><td>Every forecasting and renewal figure would have failed at runtime. No previous code used this function, so nothing else would have caught it.</td></tr>
+    <tr><td>Renewal safety trigger misconfigured</td><td>Every attempt to update a renewal would have failed.</td></tr>
+    <tr><td>Sign-in routing regression</td><td>Users signing in would have been returned to the login form. Introduced during this work; caught by the browser suite.</td></tr>
+    <tr><td>Misleading AI error message</td><td>An unconfigured AI key was reported as a service outage, sending anyone diagnosing it to the wrong place entirely.</td></tr>
+    <tr><td>Two navigation items highlighted at once</td><td>Cosmetic.</td></tr>
+  </tbody>
+</table>
+
+<h2>Risks and limitations</h2>
+
+<div class="panel warn">
+  <h4>Integrations have not been exercised against live services</h4>
+  <p>Amazon SES, Slack, WhatsApp, Gmail and Microsoft 365 are implemented and
+  tested against simulated responses. <b>No real message has been sent or
+  received through any of them,</b> because each requires an account this project
+  does not have — and Gmail and Microsoft additionally require registered
+  applications and customer consent.</p>
+  <p>The code that builds each request and interprets each failure is verified.
+  The network round trip is not. Expect to spend time on each provider's
+  approval and configuration process; that time is not development work but it
+  is real.</p>
+</div>
+
+<div class="panel warn">
+  <h4>Security credentials were mishandled during setup</h4>
+  <p>Over the course of configuration, live credentials twice ended up in files
+  intended for version control, and API keys were pasted into the wrong
+  settings. Both files have been corrected and the ignore rules tightened so
+  every credential file is excluded by default.</p>
+  <p><b>Recommended:</b> rotate the Supabase service key and the database password,
+  both of which have now been exposed in plain text. This is precautionary, not
+  evidence of a breach.</p>
+</div>
+
+<div class="panel">
+  <h4>Smaller limitations, all documented</h4>
+  <ul>
+    <li>The e-signature integration with Zoho has not been run against their live service. The manual signing workflow is complete and is what the automated tests use.</li>
+    <li>Exchange rates must be loaded before any base-currency total will display. The system deliberately shows nothing rather than assuming a rate of one.</li>
+    <li>Four tabs on the client detail screen are explanatory placeholders. The underlying data exists and is available through the API.</li>
+    <li>The local development machine runs an older Node.js version than the platform now requires. This affects the local environment, not the deployed application.</li>
+  </ul>
+</div>
+
+<h2>Assessment</h2>
+
+<p>The platform is functionally complete against the specification and its
+safety properties are enforced where they cannot be bypassed — in the database
+rather than in application code. The test suite covers the behaviour that
+matters, including the failure modes that are invisible from the outside.</p>
+
+<p>The honest position on integrations is that they are written and reasoned
+about carefully, but unproven against the real services. That is a normal state
+for integration work before accounts exist, and it should be planned for rather
+than discovered: budget time for provider approval processes, and expect one or
+two adjustments per provider once real responses arrive.</p>
+
+<p>The recommendation is to proceed to a limited pilot — internal users first,
+then one client on the portal — before general release.</p>
+
+<footer>
+  <span>Velozity Business OS — Delivery Report, phases 2–5</span>
+  <span>7 September 2026</span>
+</footer>
+
+</body>
+</html>

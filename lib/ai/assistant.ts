@@ -59,6 +59,39 @@ export interface AssistantAnswer {
   promptVersion: string;
 }
 
+/**
+ * Coerce a client-supplied transcript into one the Messages API will accept.
+ *
+ * The API requires the conversation to begin with a user turn and to alternate
+ * strictly. A browser transcript satisfies neither reliably: it may be sliced
+ * mid-pair so it opens on an assistant reply, and dropping failed turns leaves
+ * two user messages adjacent. Rather than trust the caller to have got this
+ * right, the last valid alternating run is taken and everything before it
+ * discarded — losing context is recoverable, a 400 on every follow-up is not.
+ */
+export function normaliseHistory(history: Anthropic.MessageParam[]): Anthropic.MessageParam[] {
+  const out: Anthropic.MessageParam[] = [];
+
+  for (const message of history) {
+    const previous = out[out.length - 1];
+    if (!previous) {
+      // Nothing can precede a user turn.
+      if (message.role === 'user') out.push(message);
+      continue;
+    }
+    // A repeated role would break alternation; the later turn is the better one
+    // to keep, so it replaces its predecessor.
+    if (message.role === previous.role) out[out.length - 1] = message;
+    else out.push(message);
+  }
+
+  // The new question is appended as a user turn, so the history must end on an
+  // assistant reply for the pair to alternate.
+  if (out[out.length - 1]?.role === 'user') out.pop();
+
+  return out;
+}
+
 export async function ask(
   tx: Tx,
   ctx: RequestContext,
@@ -72,7 +105,7 @@ export async function ask(
 
   const tools = toolsForUser(ctx);
   const messages: Anthropic.MessageParam[] = [
-    ...history,
+    ...normaliseHistory(history),
     // The user's question is trusted input - they typed it. Content that comes
     // back from tools is our own data. Neither is untrusted third-party text,
     // which is why this path has no <untrusted_data> wrapper.

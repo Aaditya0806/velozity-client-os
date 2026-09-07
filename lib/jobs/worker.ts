@@ -87,6 +87,18 @@ const HANDLERS: Partial<Record<JobType, Handler>> = {
       return { notified: overdue.length };
     }),
 
+  /**
+   * Opens a renewal cycle for every contract entering its notice window, then
+   * notifies the owner.
+   *
+   * Phase 1 only notified, which meant nothing recorded what happened next.
+   * Opening the row first is what turns a reminder into a piece of work: the
+   * notification now points at something that can be owned, worked and closed
+   * with a reason.
+   *
+   * `app.open_renewal_cycle` is idempotent on (contract, period_end), so a
+   * sweep that runs hourly still produces one row per cycle.
+   */
   'renewal.sweep': async () =>
     withService('sweep upcoming renewals', async (tx) => {
       const today = new Date().toISOString().slice(0, 10);
@@ -102,13 +114,26 @@ const HANDLERS: Partial<Record<JobType, Handler>> = {
            and c.status = 'fully_executed'
            and c.expiry_date is not null
            and c.expiry_date between current_date
-             and current_date + make_interval(days => coalesce(c.renewal_notice_days, 60))
-           and c.owner_user_id is not null`,
+             and current_date + make_interval(days => coalesce(c.renewal_notice_days, 60))`,
       );
 
+      let opened = 0;
+      let notified = 0;
+
       for (const renewal of renewals) {
-        if (!renewal.owner_user_id) continue;
         await tx.bindOrg(renewal.org_id);
+
+        const row = await tx.one<{ id: string | null }>(
+          `select app.open_renewal_cycle($1) as id`,
+          [renewal.contract_id],
+        );
+        if (row.id) opened += 1;
+
+        // A contract with no owner still gets its renewal row; there is simply
+        // nobody to tell. Losing the record because of that would be the worse
+        // of the two failures.
+        if (!renewal.owner_user_id) continue;
+
         await tx.query(
           `select app.deliver_notification($1,$2,$3,'contract',$4,$5,'contract',$6,$7,'normal',null,$8)`,
           [
@@ -118,13 +143,231 @@ const HANDLERS: Partial<Record<JobType, Handler>> = {
             `${renewal.reference} expires in ${renewal.days_remaining} days`,
             renewal.company_name,
             renewal.contract_id,
-            `/legal/contracts/${renewal.contract_id}`,
+            `/legal/renewals`,
             `renewal:${renewal.contract_id}:${today}`,
           ],
         );
+        notified += 1;
       }
 
-      return { notified: renewals.length };
+      return { opened, notified, considered: renewals.length };
+    }),
+
+  /**
+   * Sends the channel messages that have been queued.
+   *
+   * Each delivery is claimed, attempted and recorded individually. A provider
+   * that is misconfigured fails permanently and is marked failed rather than
+   * retried forever — a Slack bot that was never invited to the channel will
+   * not be invited by trying again a hundred times, and the retries bury the
+   * one error that explains it.
+   */
+  'channel.dispatch': async () =>
+    withService('dispatch channel messages', async (tx) => {
+      const pending = await tx.many<{
+        id: string;
+        org_id: string;
+        recipient: string;
+        subject: string | null;
+        body: string;
+        attempts: number;
+        provider: string;
+        display_name: string;
+        config: Record<string, unknown>;
+        secret_ref: string | null;
+      }>(
+        `select d.id, d.org_id, d.recipient, d.subject, d.body, d.attempts,
+                c.provider, c.display_name, c.config, c.secret_ref
+           from channel_deliveries d
+           join integration_connections c on c.id = d.connection_id
+          where d.status = 'queued'
+            and c.deleted_at is null
+            and c.status = 'active'
+          order by d.queued_at
+          limit 50`,
+      );
+
+      let sent = 0;
+      let failed = 0;
+
+      for (const delivery of pending) {
+        await tx.bindOrg(delivery.org_id);
+
+        try {
+          const { channelProvider } = await import('@/lib/integrations');
+          const { resolveSecret } = await import('@/lib/integrations/secrets');
+
+          const provider = channelProvider(delivery.provider);
+          const token = resolveSecret(delivery.secret_ref, delivery.display_name);
+
+          const result = await provider.send(
+            {
+              recipient: delivery.recipient,
+              body: delivery.body,
+              ...(delivery.subject ? { subject: delivery.subject } : {}),
+            },
+            { token, config: delivery.config },
+          );
+
+          await tx.query(
+            `update channel_deliveries
+                set status = 'sent', provider_message_id = $2, sent_at = now(),
+                    attempts = attempts + 1, error = null
+              where id = $1`,
+            [delivery.id, result.providerMessageId],
+          );
+          await tx.query(
+            `update integration_connections
+                set last_used_at = now(), last_error = null, status = 'active'
+              where id = (select connection_id from channel_deliveries where id = $1)`,
+            [delivery.id],
+          );
+          sent += 1;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const code = (error as { code?: string }).code;
+
+          // PROVIDER_UNAVAILABLE means configuration: retrying cannot fix it.
+          const permanent = code === 'PROVIDER_UNAVAILABLE' || code === 'VALIDATION_ERROR';
+          const exhausted = delivery.attempts + 1 >= 5;
+
+          await tx.query(
+            `update channel_deliveries
+                set status = case when $3 then 'failed' else 'queued' end,
+                    attempts = attempts + 1,
+                    error = $2
+              where id = $1`,
+            [delivery.id, message.slice(0, 500), permanent || exhausted],
+          );
+
+          if (permanent) {
+            // Marking the connection itself, so the settings page can say which
+            // integration is broken instead of leaving it looking healthy.
+            await tx.query(
+              `update integration_connections
+                  set status = 'error', last_error = $2
+                where id = (select connection_id from channel_deliveries where id = $1)`,
+              [delivery.id, message.slice(0, 500)],
+            );
+          }
+
+          logger.warn('Channel delivery failed', {
+            delivery_id: delivery.id,
+            provider: delivery.provider,
+            permanent,
+            error: message,
+          });
+          failed += 1;
+        }
+      }
+
+      return { considered: pending.length, sent, failed };
+    }),
+
+  /**
+   * Pulls new mail from every connected mailbox.
+   *
+   * Two properties this job must preserve, both of which are easy to lose:
+   *
+   *   - It only ever reads. There is no branch here that sends anything. A
+   *     message arriving cannot cause a message to leave, which is the same
+   *     rule the automation engine follows and for the same reason.
+   *
+   *   - It stores only mail exchanged with a known contact.
+   *     `app.ingest_inbound_email` decides that, and returns null for anything
+   *     else. The mailbox belongs to a person and most of it is none of this
+   *     product's business.
+   */
+  'mailbox.sync': async () =>
+    withService('sync connected mailboxes', async (tx) => {
+      const connections = await tx.many<{
+        id: string;
+        org_id: string;
+        provider: string;
+        display_name: string;
+        config: Record<string, unknown>;
+        secret_ref: string | null;
+        sync_cursor: string | null;
+      }>(
+        `select id, org_id, provider, display_name, config, secret_ref, sync_cursor
+           from integration_connections
+          where deleted_at is null
+            and status = 'active'
+            and purpose = 'mailbox'
+            and provider in ('gmail', 'microsoft')`,
+      );
+
+      let ingested = 0;
+      let skipped = 0;
+
+      for (const connection of connections) {
+        await tx.bindOrg(connection.org_id);
+
+        try {
+          const { mailboxProvider } = await import('@/lib/email/mailbox');
+          const { resolveSecret } = await import('@/lib/integrations/secrets');
+
+          const provider = mailboxProvider(connection.provider);
+          const accessToken = resolveSecret(connection.secret_ref, connection.display_name);
+
+          const page = await provider.list(
+            { accessToken, config: connection.config },
+            connection.sync_cursor,
+            50,
+          );
+
+          for (const message of page.messages) {
+            const row = await tx.one<{ id: string | null }>(
+              `select app.ingest_inbound_email(
+                 $1,$2,$3,$4,$5,$6,$7,$8,$9::text[],$10,$11,$12,$13
+               ) as id`,
+              [
+                connection.org_id,
+                connection.id,
+                connection.provider,
+                message.rfc822MessageId,
+                message.threadKey,
+                message.inReplyTo,
+                message.fromEmail,
+                message.fromName,
+                message.toEmails,
+                message.subject,
+                message.bodyText,
+                message.snippet,
+                message.receivedAt,
+              ],
+            );
+            if (row.id) ingested += 1;
+            else skipped += 1;
+          }
+
+          await tx.query(
+            `update integration_connections
+                set sync_cursor = $2, last_synced_at = now(), last_error = null, status = 'active'
+              where id = $1`,
+            [connection.id, page.cursor],
+          );
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const permanent = (error as { code?: string }).code === 'PROVIDER_UNAVAILABLE';
+
+          await tx.query(
+            `update integration_connections
+                set last_error = $2, status = case when $3 then 'error' else status end
+              where id = $1`,
+            [connection.id, message.slice(0, 500), permanent],
+          );
+
+          logger.warn('Mailbox sync failed', {
+            connection_id: connection.id,
+            provider: connection.provider,
+            permanent,
+            error: message,
+          });
+        }
+      }
+
+      return { mailboxes: connections.length, ingested, skipped };
     }),
 
   'health.recompute': async () =>

@@ -7,6 +7,12 @@ coverage/
 .env
 .env.local
 .env*.local
+# Every dotenv file is ignored by default. .env.example and .env.test are
+# committed deliberately, and both contain only placeholders — see the note at
+# the top of each.
+.env.*
+!.env.example
+!.env.test
 *.log
 npm-debug.log*
 .DS_Store
@@ -18,3 +24,8 @@ test-results/
 .supabase/
 tmp/
 scratch/
+
+# Playwright session state — contains real access tokens.
+tests/browser/.auth/
+test-results/
+playwright-report/

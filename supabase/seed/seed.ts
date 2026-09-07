@@ -303,6 +303,7 @@ export async function seed(db: SqlDriver, options: SeedOptions = {}): Promise<Se
 
   // -- Clients and contacts --------------------------------------------------
   const companies: Record<string, string> = {};
+  const contactIds: Record<string, string> = {};
 
   for (const company of COMPANIES) {
     const id = randomUUID();
@@ -329,13 +330,16 @@ export async function seed(db: SqlDriver, options: SeedOptions = {}): Promise<Se
     ];
 
     for (const contact of contacts) {
+      const contactId = randomUUID();
+      contactIds[`${company.key}:${contact.first.toLowerCase()}`] = contactId;
+
       await db.query(
         `insert into contacts (
-           org_id, company_id, first_name, last_name, email, job_title, contact_role,
+           id, org_id, company_id, first_name, last_name, email, job_title, contact_role,
            is_primary, is_billing, is_signatory, owner_user_id, team_id, is_demo, created_by
-         ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,true,$13)`,
+         ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,true,$14)`,
         [
-          orgId, id, contact.first, contact.last,
+          contactId, orgId, id, contact.first, contact.last,
           `${contact.first.toLowerCase()}@${company.key}.example.com`,
           contact.title, contact.role, contact.primary,
           contact.billing ?? false, contact.signatory ?? false,
@@ -343,6 +347,78 @@ export async function seed(db: SqlDriver, options: SeedOptions = {}): Promise<Se
         ],
       );
     }
+  }
+
+  // -- Portal access ---------------------------------------------------------
+  //
+  // Two clients with a login, and deliberately different capabilities: one sees
+  // invoices and can accept deliverables, the other cannot. A demo where every
+  // account can do everything proves nothing about the parts that restrict.
+  const PORTAL_PEOPLE = [
+    {
+      key: 'northwind:priya',
+      email: 'priya@northwind.example.com',
+      name: 'Priya Anand',
+      company: 'northwind',
+      invoices: true,
+      documents: true,
+      approve: true,
+    },
+    {
+      key: 'meridian:aisha',
+      email: 'aisha@meridian.example.com',
+      name: 'Aisha Okonkwo',
+      company: 'meridian',
+      invoices: false,
+      documents: true,
+      approve: false,
+    },
+  ] as const;
+
+  for (const person of PORTAL_PEOPLE) {
+    const contactId = contactIds[person.key];
+    if (!contactId) continue;
+
+    const authId = options.provisionAuthUser
+      ? await options.provisionAuthUser({ email: person.email, name: person.name })
+      : await (async () => {
+          const generated = randomUUID();
+          await db.query(
+            `insert into auth.users (id, email, raw_user_meta_data)
+             values ($1,$2,$3) on conflict (id) do nothing`,
+            [generated, person.email, JSON.stringify({ full_name: person.name })],
+          );
+          return generated;
+        })();
+
+    // A profile, but pointedly no org_memberships row: a portal user who had
+    // one would satisfy requireContext() and land in the internal application
+    // with no permissions — a blank dashboard instead of their portal.
+    await db.query(
+      `insert into user_profiles (id, email, full_name, timezone, status, is_demo)
+       values ($1,$2,$3,'Europe/London','active',true)
+       on conflict (id) do nothing`,
+      [authId, person.email, person.name],
+    );
+
+    await db.query(
+      `insert into portal_users (
+         org_id, company_id, contact_id, user_id, status,
+         can_view_invoices, can_view_documents, can_approve_deliverables,
+         invited_by, invited_at
+       ) values ($1,$2,$3,$4,'active',$5,$6,$7,$8, now())
+       on conflict (org_id, company_id, user_id) do nothing`,
+      [
+        orgId,
+        companies[person.company],
+        contactId,
+        authId,
+        person.invoices,
+        person.documents,
+        person.approve,
+        users.admin!.id,
+      ],
+    );
   }
 
   // -- Opportunities ---------------------------------------------------------

@@ -21,6 +21,7 @@ export const SCOPED_RESOURCES = [
   'contract',
   'project',
   'task',
+  'renewal',
 ] as const;
 export type ScopedResource = (typeof SCOPED_RESOURCES)[number];
 
@@ -32,6 +33,10 @@ export const SCOPED_ACTIONS: Record<ScopedResource, readonly string[]> = {
   contract: ['read', 'create', 'update'],
   project: ['read', 'create', 'update', 'delete'],
   task: ['read', 'create', 'update', 'delete'],
+  // A renewal is opened by the sweep and closed by a decision; nobody creates
+  // or deletes one by hand, so those actions do not exist rather than existing
+  // and being refused.
+  renewal: ['read', 'update'],
 };
 
 /** Org-wide authorities that have no meaningful narrower form. */

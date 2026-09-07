@@ -52,6 +52,9 @@ const serverSchema = z.object({
   AWS_ACCESS_KEY_ID: z.string().optional(),
   AWS_SECRET_ACCESS_KEY: z.string().optional(),
   SES_WEBHOOK_SECRET: z.string().optional(),
+  // Required for SES to emit delivery, bounce and complaint events at all; a
+  // message sent without one is delivered but silently untracked.
+  SES_CONFIGURATION_SET: z.string().optional(),
 
   // --- E-signature ----------------------------------------------------------
   SIGNATURE_PROVIDER: z.enum(['zoho_sign', 'manual']).default('manual'),

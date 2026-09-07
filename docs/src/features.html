@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Velozity Business OS — Feature Inventory</title>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div class="cover">
+  <div class="brand">
+    <span class="mark">V</span>
+    <span class="name">Velozity Business OS</span>
+    <span class="tag">Feature inventory</span>
+  </div>
+  <h1>Everything the platform does</h1>
+  <p class="subtitle">A complete inventory of delivered capability, phase&nbsp;1 through phase&nbsp;5.</p>
+  <div class="meta">
+    <div><b>7 September 2026</b>Compiled</div>
+    <div><b>Phases 1–5</b>Scope</div>
+    <div><b>307</b>Automated tests</div>
+    <div><b>24</b>Database migrations</div>
+  </div>
+</div>
+
+<p>Velozity Business OS is a multi-tenant platform covering the whole client
+lifecycle — from first contact to renewal — for a services business. This
+document lists what has been built. A companion delivery report covers status,
+verification and what remains outstanding.</p>
+
+<div class="stats">
+  <div class="stat"><div class="v">85</div><div class="k">Tables</div></div>
+  <div class="stat"><div class="v">175</div><div class="k">RLS policies</div></div>
+  <div class="stat"><div class="v">96</div><div class="k">API endpoints</div></div>
+  <div class="stat"><div class="v">24</div><div class="k">App screens</div></div>
+  <div class="stat"><div class="v">133</div><div class="k">Permissions</div></div>
+  <div class="stat"><div class="v">307</div><div class="k">Tests</div></div>
+</div>
+
+<!-- ================================================================ P1 -->
+<div class="phase"><span class="n">Phase 1</span><h2>The client lifecycle</h2><span class="pill done">Delivered</span></div>
+
+<h3>Sales pipeline</h3>
+<div class="feat"><div class="t">Lead → Qualification → Discovery → Diagnosis → Solution → Proposal → Negotiation → Won</div>
+<div class="d">A guarded state machine. A deal cannot skip a stage or move without meeting that stage's requirements, and the rule is enforced in the database — not merely in the interface.</div></div>
+<div class="feat"><div class="t">Qualification checklist, discovery capture and diagnosis</div>
+<div class="d">Structured records rather than free text, so the reason a deal advanced is legible afterwards.</div></div>
+<div class="feat"><div class="t">Kanban board with drag-to-transition</div>
+<div class="d">Dragging a card attempts a transition and reports why it was refused, rather than silently reverting.</div></div>
+<div class="feat"><div class="t">Solution design and service catalogue</div>
+<div class="d">Reusable services with rates and estimates, composed into a priced solution.</div></div>
+
+<h3>Proposals</h3>
+<div class="feat"><div class="t">Versioned proposals with an approval trail</div>
+<div class="d">Draft → internal review → approved → sent → accepted. An accepted version is frozen and can never be edited.</div></div>
+<div class="feat"><div class="t">Separate authority to approve and to send</div>
+<div class="d">The person who approves a proposal is not automatically the person who may send it.</div></div>
+
+<h3>Legal and contracts</h3>
+<div class="feat"><div class="t">Deterministic contract generation from templates</div>
+<div class="d">Rendering <em>fails</em> on a missing variable rather than producing a document with a blank in it. Every rendered document records the exact values used.</div></div>
+<div class="feat"><div class="t">NDA, MSA, SOW, addendum and amendment types</div>
+<div class="d">With parent–child relationships, so an amendment always knows what it amends.</div></div>
+<div class="feat"><div class="t">E-signature integration</div>
+<div class="d">Zoho Sign, plus a fully functional manual provider so the complete legal workflow runs without a provider account.</div></div>
+<div class="feat"><div class="t">Executed-document capture with SHA-256 verification</div>
+<div class="d">The signed document is stored and hashed. A file whose bytes no longer match its recorded hash is quarantined and cannot be downloaded.</div></div>
+<div class="feat"><div class="t">The legal gate</div>
+<div class="d">A client cannot be onboarded until the required agreements are executed and the required payments met. Enforced by a database function, so no code path can bypass it. Overrides are possible, permanent and recorded.</div></div>
+
+<h3>Finance</h3>
+<div class="feat"><div class="t">Payment requirements, invoices and payments</div>
+<div class="d">Advance, milestone, final and full requirements, any of which can block onboarding.</div></div>
+<div class="feat"><div class="t">Exact decimal money and multi-currency</div>
+<div class="d">Money is never a floating-point number. Conversion uses recorded FX rates and returns nothing rather than assuming parity when a rate is missing.</div></div>
+
+<h3>Delivery</h3>
+<div class="feat"><div class="t">Onboarding checklists, projects, workstreams, tasks and deliverables</div>
+<div class="d">Provisioned automatically when a deal is won and the legal gate is satisfied.</div></div>
+<div class="feat"><div class="t">KPIs with baselines, targets and measurements</div>
+<div class="d">Per client and per project, with client-visible flags.</div></div>
+<div class="feat"><div class="t">Project health tracking and client reports</div></div>
+
+<h3>Platform foundations</h3>
+<div class="feat"><div class="t">Multi-tenant isolation enforced by the database</div>
+<div class="d">Row-level security is enabled <em>and forced</em> on every tenant table, deny-by-default. One customer cannot read another's data even if application code asks for it.</div></div>
+<div class="feat"><div class="t">Role-based access control with ownership scopes</div>
+<div class="d">133 permissions across 8 roles, each expressible as own / team / organisation.</div></div>
+<div class="feat"><div class="t">Complete audit trail and a domain event log</div>
+<div class="d">Every consequential action is recorded with who, when, and from which request.</div></div>
+<div class="feat"><div class="t">Document management with versioning and immutability</div>
+<div class="d">Confidential documents require a separate permission; a denied attempt is itself recorded.</div></div>
+<div class="feat"><div class="t">Background worker with retry and backoff</div></div>
+
+<h3>AI assistant</h3>
+<div class="feat"><div class="t">Answers questions about your own data</div>
+<div class="d">Eight fixed read-only tools. No generated SQL. Restricted to what the person asking is permitted to see.</div></div>
+<div class="feat"><div class="t">The model can never write to a record</div>
+<div class="d">Anything it drafts becomes a proposal that a person reviews, edits and approves before it takes effect. Enforced by a database trigger, not by convention.</div></div>
+<div class="feat"><div class="t">Every answer shows its sources</div>
+<div class="d">The list of tool calls that produced an answer is shown alongside it, so the working can be checked.</div></div>
+
+<h3>Automation engine</h3>
+<div class="feat"><div class="t">WHEN → IF → THEN rules over domain events</div>
+<div class="d">A closed set of eleven actions. There is deliberately no “send email” action anywhere in the product.</div></div>
+<div class="feat"><div class="t">Loop protection</div>
+<div class="d">Chain depth and per-record cooldown, both recorded on every run.</div></div>
+
+<!-- ================================================================ P2 -->
+<div class="phase"><span class="n">Phase 2</span><h2>Production readiness</h2><span class="pill done">Delivered</span></div>
+
+<div class="feat"><div class="t">Amazon SES email provider <span class="pill new">New</span></div>
+<div class="d">Full implementation. A rejected sender identity is reported as a configuration fault rather than a temporary one, so the queue stops instead of retrying a broken setup indefinitely.</div></div>
+<div class="feat"><div class="t">Browser test suite <span class="pill new">New</span></div>
+<div class="d">29 tests that drive the real application in a real browser. They verify that every page not only renders but <em>responds to a click</em> — a distinction that matters, because a page whose JavaScript failed looks completely normal and does nothing.</div></div>
+<div class="feat"><div class="t">Preflight diagnostic (<span class="mono">npm run doctor</span>) <span class="pill new">New</span></div>
+<div class="d">Checks the database, migrations, seed data, security posture, storage credentials and the AI key against the live services, and reports the actual reason for each failure.</div></div>
+<div class="feat"><div class="t">Performance work <span class="pill new">New</span></div>
+<div class="d">Sign-in identity resolution reduced from five database queries to one; transaction setup from five network round trips to two; rate limiting from four to one. Page response improved from roughly 3.9 seconds to under 0.4.</div></div>
+<div class="feat"><div class="t">Runtime version pinned</div>
+<div class="d">A deployment on an unsupported Node version now fails loudly rather than warning quietly.</div></div>
+
+<!-- ================================================================ P3 -->
+<div class="phase"><span class="n">Phase 3</span><h2>Client portal</h2><span class="pill done">Delivered</span></div>
+
+<div class="feat"><div class="t">A separate application for your clients</div>
+<div class="d">Six screens: overview, projects, project detail, documents, invoices and reports. Clients see their own work as their delivery team sees it.</div></div>
+<div class="feat"><div class="t">Clients can accept or reject deliverables</div>
+<div class="d">A rejection must say why. The decision is attributed to the individual, and appears on both timelines.</div></div>
+<div class="feat"><div class="t">Per-person permissions</div>
+<div class="d">Three independent switches — documents, invoices, approve deliverables — set per person from the client record.</div></div>
+<div class="feat"><div class="t">Documents delivered by short-lived signed links</div>
+<div class="d">Issued per click and expiring in fifteen minutes, so a link cannot outlive the page it was meant for. Confidential documents are never visible to a client.</div></div>
+<div class="feat"><div class="t">Invite and revoke access, with a full record</div>
+<div class="d">Clients set their own password from a one-time link; no password is ever generated for them. Revoked access is retained, not deleted — “who could see our invoices, and until when” is a question that gets asked after the fact.</div></div>
+
+<div class="panel">
+  <h4>How the boundary is built</h4>
+  <p>The portal reads through 15 dedicated database projections that <em>physically
+  exclude</em> cost, margin, internal notes and AI analysis. Those columns are not
+  hidden or filtered — they do not exist in what the portal can query, so no
+  future mistake in the application can expose them. Portal users hold no
+  internal membership, so every internal security policy denies them by
+  construction.</p>
+</div>
+
+<!-- ================================================================ P4 -->
+<div class="phase"><span class="n">Phase 4</span><h2>Revenue retention</h2><span class="pill done">Delivered</span></div>
+
+<div class="feat"><div class="t">Renewal engine</div>
+<div class="d">Every executed contract with an end date opens a renewal cycle as it approaches its notice window. Each cycle has an owner, a decision and an outcome — renewed, lost, auto-renewed or not renewing.</div></div>
+<div class="feat"><div class="t">A lost renewal must record why</div>
+<div class="d">The single most useful field in the system. Reasons are counted on the renewals dashboard, so churn becomes something you can act on rather than only observe.</div></div>
+<div class="feat"><div class="t">Retention rate and value at risk</div>
+<div class="d">Value due in the next 90 days, value currently being worked, and twelve-month retention as a share of value that actually reached a decision.</div></div>
+<div class="feat"><div class="t">Pipeline forecast</div>
+<div class="d">Weighted value by expected close month, shown beside unweighted open value and already-committed value — because a single weighted figure invites more confidence than the method supports.</div></div>
+<div class="feat"><div class="t">Delivery profitability</div>
+<div class="d">Invoiced revenue less recorded cost, per project, with hours used against estimate. Restricted to those permitted to see cost. A project with nothing invoiced reports “no data” rather than a misleading negative margin.</div></div>
+
+<div class="panel">
+  <h4>On the honesty of the numbers</h4>
+  <p>Amounts that cannot be converted to your base currency — because no exchange
+  rate has been loaded — are excluded from every total <em>and counted</em>, with the
+  report saying so explicitly. A total that quietly absorbs an unconverted
+  currency looks exactly like a correct one, which makes it worse than no total
+  at all.</p>
+</div>
+
+<!-- ================================================================ P5 -->
+<div class="phase"><span class="n">Phase 5</span><h2>Integrations</h2><span class="pill partial">Built · unverified</span></div>
+
+<div class="feat"><div class="t">No-code automation builder</div>
+<div class="d">A visual WHEN → IF → THEN editor. Create, edit, activate, pause and delete rules without a developer. Switching a rule on is a separate action from editing it, and the two are recorded separately.</div></div>
+<div class="feat"><div class="t">Slack notifications</div>
+<div class="d">Alerts posted to a channel. Every message is recorded before it is attempted, so one lost to an outage leaves a trace rather than disappearing.</div></div>
+<div class="feat"><div class="t">WhatsApp notifications</div>
+<div class="d">Via the Meta Cloud API, using an approved message template. The system <em>refuses</em> to send without one rather than attempting it, because a non-template message outside the 24-hour window is accepted by the API and never delivered — a failure that looks identical to success.</div></div>
+<div class="feat"><div class="t">Gmail and Microsoft 365 mailbox sync</div>
+<div class="d">Client email appears on the client's timeline automatically. Read-only access is requested; the system asks for no permission to send, modify or delete.</div></div>
+
+<div class="panel warn">
+  <h4>Three rules that hold by construction</h4>
+  <ul>
+    <li><b>Incoming email is data, never an instruction.</b> No automation can be triggered by it, and the AI assistant reads it through the same restricted tools as everything else.</li>
+    <li><b>Nothing is ever auto-replied.</b> There is no path from a received message to a sent one that does not pass through a person.</li>
+    <li><b>Only mail exchanged with a known contact is stored.</b> A mailbox belongs to an individual and most of its contents are none of the platform's business.</li>
+  </ul>
+</div>
+
+<h2>Security posture, throughout</h2>
+
+<table>
+  <thead><tr><th>Guarantee</th><th>How it is enforced</th></tr></thead>
+  <tbody>
+    <tr><td>One customer cannot read another's data</td><td>Row-level security, forced on all 85 tables, deny-by-default</td></tr>
+    <tr><td>Lifecycle changes follow their rules</td><td>Database triggers reject any status change made outside the transition service</td></tr>
+    <tr><td>Onboarding cannot bypass legal or payment</td><td>A database function asserts the gate; overrides are permanent and recorded</td></tr>
+    <tr><td>The AI cannot change anything</td><td>Read-only tools; a trigger requires human approval before any drafted action executes</td></tr>
+    <tr><td>Automations cannot send email</td><td>The action is absent from the schema, not merely disabled</td></tr>
+    <tr><td>Clients cannot see cost or margin</td><td>Those columns do not exist in the portal's projections</td></tr>
+    <tr><td>Signed documents cannot be swapped</td><td>SHA-256 verification; a mismatch quarantines the document</td></tr>
+    <tr><td>Integration tokens cannot leak from a backup</td><td>Credentials are referenced by name and never written to the database</td></tr>
+  </tbody>
+</table>
+
+<footer>
+  <span>Velozity Business OS — Feature Inventory</span>
+  <span>7 September 2026</span>
+</footer>
+
+</body>
+</html>

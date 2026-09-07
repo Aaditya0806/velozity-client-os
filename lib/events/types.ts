@@ -98,6 +98,15 @@ export const EVENT_NAMES = [
 
 export type EventName = (typeof EVENT_NAMES)[number];
 
+// The renewal cycle emits its outcomes so automations can react to churn.
+export const RENEWAL_EVENT_NAMES = [
+  'renewal.in_progress',
+  'renewal.won',
+  'renewal.lost',
+  'renewal.auto_renewed',
+  'renewal.not_renewing',
+] as const;
+
 export interface DomainEvent<P = Record<string, unknown>> {
   id: string;
   orgId: string;

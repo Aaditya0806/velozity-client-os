@@ -46,8 +46,11 @@ export function SignInForm({ nextPath, reason }: { nextPath: string; reason?: st
         return;
       }
 
-      router.push(nextPath);
+      // Refresh first: it drops the router cache built while signed out, so the
+      // navigation that follows re-fetches with the new session rather than
+      // replaying a redirect back to this form.
       router.refresh();
+      router.push(nextPath);
     } catch {
       setError('Could not reach the server. Please try again.');
       setLoading(false);

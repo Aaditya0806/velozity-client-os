@@ -8,7 +8,7 @@
 import type { LucideIcon } from 'lucide-react';
 import {
   LayoutDashboard, GitBranch, Building2, Package, FolderKanban, CheckSquare,
-  FileText, Scale, BarChart3, Sparkles, Workflow, Wallet, Settings,
+  FileText, Scale, BarChart3, Sparkles, Workflow, Wallet, Settings, RefreshCw,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -99,6 +99,13 @@ export const NAVIGATION: NavSection[] = [
         anyPermission: ['contract:read:own', 'contract:read:team', 'contract:read:org'],
       },
       {
+        label: 'Renewals',
+        href: '/legal/renewals',
+        keywords: 'renewal churn retention expiring contracts at risk',
+        icon: RefreshCw,
+        anyPermission: ['renewal:read:own', 'renewal:read:team', 'renewal:read:org'],
+      },
+      {
         label: 'Finance',
         href: '/finance',
         keywords: 'invoices payments revenue billing money',
@@ -160,7 +167,29 @@ export function visibleNavigation(permissions: readonly string[]): NavSection[] 
   })).filter((section) => section.items.length > 0);
 }
 
+/**
+ * Every href in the navigation, longest first.
+ *
+ * Used to decide which prefix-matching entry wins when one nav item sits
+ * underneath another: /legal/renewals is inside /legal, and without this both
+ * would light up, which reads as a bug rather than as a hierarchy.
+ */
+const ALL_HREFS: string[] = NAVIGATION.flatMap((section) => section.items.map((i) => i.href))
+  .sort((a, b) => b.length - a.length);
+
 export function isActive(pathname: string, item: NavItem): boolean {
-  if (item.matchPrefix) return pathname === item.href || pathname.startsWith(`${item.href}/`);
-  return pathname === item.href;
+  if (pathname === item.href) return true;
+  if (!item.matchPrefix) return false;
+  if (!pathname.startsWith(`${item.href}/`)) return false;
+
+  // A prefix match only counts when no more specific entry also matches: the
+  // deepest destination is the one the person actually chose.
+  const better = ALL_HREFS.find(
+    (href) =>
+      href !== item.href &&
+      href.startsWith(`${item.href}/`) &&
+      (pathname === href || pathname.startsWith(`${href}/`)),
+  );
+
+  return better === undefined;
 }

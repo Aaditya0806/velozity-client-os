@@ -24,7 +24,9 @@ export type JobType =
   | 'report.generate'
   | 'health.recompute'
   | 'task.overdue_sweep'
-  | 'renewal.sweep';
+  | 'renewal.sweep'
+  | 'channel.dispatch'
+  | 'mailbox.sync';
 
 export interface EnqueueInput {
   type: JobType;

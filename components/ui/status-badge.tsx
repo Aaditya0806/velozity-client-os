@@ -48,6 +48,11 @@ const TONES: Record<string, Tone> = {
   cancelled: 'neutral',
   todo: 'neutral',
   in_progress: 'info',
+
+  // Renewal
+  upcoming: 'warning',
+  auto_renewed: 'success',
+  not_renewing: 'neutral',
   blocked: 'danger',
   in_review: 'warning',
   done: 'success',

@@ -72,10 +72,16 @@ export interface CallResult {
 export async function callModel(options: CallOptions): Promise<CallResult> {
   const env = serverEnv();
   const model = env.ANTHROPIC_MODEL;
+
+  // Resolved before the try, so a missing API key surfaces as AI_DISABLED with
+  // its own instructions rather than being swallowed and re-reported as a
+  // provider fault. Telling an operator the provider failed when in fact
+  // nothing was ever configured sends them to look in the wrong place.
+  const sdk = anthropic();
   const started = Date.now();
 
   try {
-    const response = await anthropic().messages.create({
+    const response = await sdk.messages.create({
       model,
       max_tokens: options.maxTokens ?? env.AI_MAX_OUTPUT_TOKENS,
       temperature: options.temperature ?? 0,
@@ -100,9 +106,34 @@ export async function callModel(options: CallOptions): Promise<CallResult> {
       },
     };
   } catch (error) {
+    // An AppError raised deliberately below this point already says exactly what
+    // went wrong; re-wrapping it would replace a precise message with a vague one.
+    if (error instanceof AppError) throw error;
+
     logger.error('Model call failed', { model, error });
 
     if (error instanceof Anthropic.APIError) {
+      if (error.status === 401 || error.status === 403) {
+        throw new AppError(
+          'AI_DISABLED',
+          'The Anthropic API key was rejected. Check ANTHROPIC_API_KEY in .env, then restart the server.',
+          { cause: error },
+        );
+      }
+      if (error.status === 404) {
+        throw new AppError(
+          'AI_DISABLED',
+          `The model "${model}" is not available to this API key. Set ANTHROPIC_MODEL to a model your account can use.`,
+          { cause: error },
+        );
+      }
+      if (error.status === 400 && /credit|balance|quota/i.test(error.message)) {
+        throw new AppError(
+          'AI_DISABLED',
+          'The Anthropic account has no available credit. Add credit at console.anthropic.com, then retry.',
+          { cause: error },
+        );
+      }
       if (error.status === 429) {
         throw new AppError('RATE_LIMITED', 'The AI service is rate limited. Please retry shortly.', {
           cause: error,

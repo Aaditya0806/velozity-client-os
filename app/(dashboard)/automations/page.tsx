@@ -6,6 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { formatRelative } from '@/lib/util/format';
+import {
+  NewAutomationButton,
+  AutomationRowControls,
+  type AutomationSummary,
+} from './automation-controls';
 
 export const metadata: Metadata = { title: 'Automations' };
 export const dynamic = 'force-dynamic';
@@ -13,7 +18,9 @@ export const dynamic = 'force-dynamic';
 export default async function AutomationsPage() {
   const ctx = await requireContext();
 
-  const { automations, runs } = await query(
+  const canManage = ctx.permissions.has('automation:manage:org');
+
+  const { automations, runs, users } = await query(
     ctx,
     async (tx) => ({
       automations: await tx.many<Record<string, unknown>>(
@@ -30,6 +37,16 @@ export default async function AutomationsPage() {
          order by r.created_at desc
          limit 25`,
       ),
+      // For the "assign an owner" action, which needs real people to choose
+      // between rather than a free-text user id.
+      users: await tx.many<{ id: string; full_name: string }>(
+        `select u.id, u.full_name
+           from user_profiles u
+           join org_memberships m on m.user_id = u.id
+          where m.org_id = $1 and m.status = 'active' and u.deleted_at is null
+          order by u.full_name`,
+        [ctx.org.id],
+      ),
     }),
     { readOnly: true },
   );
@@ -39,6 +56,7 @@ export default async function AutomationsPage() {
       <PageHeader
         title="Automations"
         description="When something happens, if a condition holds, then do these things."
+        actions={canManage ? <NewAutomationButton users={users} /> : undefined}
       />
 
       <Card className="border-primary/30 bg-primary/[0.03]">
@@ -73,7 +91,7 @@ export default async function AutomationsPage() {
             const filter = automation.trigger_filter as Record<string, unknown>;
 
             return (
-              <Card key={String(automation.id)}>
+              <Card key={String(automation.id)} data-automation={String(automation.name)}>
                 <CardContent className="p-5">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -92,6 +110,14 @@ export default async function AutomationsPage() {
                         <span className="text-xs text-muted-foreground">
                           {String(automation.run_count)} runs
                         </span>
+                      ) : null}
+                      {canManage ? (
+                        <AutomationRowControls
+                          automation={
+                            JSON.parse(JSON.stringify(automation)) as AutomationSummary
+                          }
+                          users={users}
+                        />
                       ) : null}
                     </div>
                   </div>

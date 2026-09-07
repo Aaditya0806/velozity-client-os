@@ -21,6 +21,9 @@ interface Message {
   error?: boolean;
 }
 
+/** Turns carried into each request. Ten is the server's cap. */
+const HISTORY_TURNS = 10;
+
 const SUGGESTIONS = [
   'Which clients are at risk?',
   'What is awaiting signature?',
@@ -28,7 +31,7 @@ const SUGGESTIONS = [
   'Which contracts expire in the next 90 days?',
 ];
 
-export function Assistant() {
+export function Assistant({ configured = true }: { configured?: boolean }) {
   const [messages, setMessages] = React.useState<Message[]>([]);
   const [input, setInput] = React.useState('');
   const [loading, setLoading] = React.useState(false);
@@ -39,7 +42,14 @@ export function Assistant() {
   }, [messages]);
 
   const ask = async (question: string) => {
-    if (!question.trim() || loading) return;
+    if (!question.trim() || loading || !configured) return;
+
+    // Captured before the optimistic append, so the new question is not also
+    // sent as the last line of its own history.
+    const history = messages
+      .filter((message) => !message.error && message.content.trim().length > 0)
+      .slice(-HISTORY_TURNS)
+      .map((message) => ({ role: message.role, content: message.content.slice(0, 8000) }));
 
     setMessages((current) => [...current, { role: 'user', content: question }]);
     setInput('');
@@ -49,7 +59,7 @@ export function Assistant() {
       const response = await fetch('/api/v1/ai/ask', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ question }),
+        body: JSON.stringify({ question, history }),
       });
 
       const body = (await response.json()) as {
@@ -103,6 +113,7 @@ export function Assistant() {
                     key={suggestion}
                     variant="outline"
                     size="sm"
+                    disabled={!configured}
                     onClick={() => void ask(suggestion)}
                   >
                     {suggestion}
@@ -174,11 +185,15 @@ export function Assistant() {
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask about clients, deals, contracts, delivery…"
-            disabled={loading}
+            placeholder={
+              configured
+                ? 'Ask about clients, deals, contracts, delivery…'
+                : 'Set ANTHROPIC_API_KEY in .env to enable the assistant'
+            }
+            disabled={loading || !configured}
             aria-label="Ask the assistant"
           />
-          <Button type="submit" size="icon" disabled={loading || !input.trim()}>
+          <Button type="submit" size="icon" disabled={loading || !configured || !input.trim()}>
             <Send className="h-4 w-4" aria-hidden />
             <span className="sr-only">Send</span>
           </Button>

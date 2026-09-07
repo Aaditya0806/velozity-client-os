@@ -141,25 +141,38 @@ export async function withTenant<T>(
   const attempt = async (): Promise<T> => {
     const conn = await driver.connect();
     try {
-      await conn.query('begin');
-      if (options.readOnly) {
-        await conn.query('set transaction read only');
-      }
-
-      // Order matters: drop privilege first, then publish claims. A failure
-      // between the two leaves the session with fewer rights, never more.
-      await conn.query('set local role authenticated');
+      // Transaction setup is two round trips, not five.
+      //
+      // Every statement here is a network round trip, and against a database in
+      // another region that is ~180ms each. Opening a transaction the obvious
+      // way — BEGIN, SET ROLE, then three SET_CONFIGs — cost most of a second
+      // before any actual work began, on every single query in the product.
+      //
+      // The first call carries no parameters, so it goes over the simple query
+      // protocol and PostgreSQL accepts the whole batch at once. The second
+      // sets all three GUCs in one statement.
+      //
+      // Order still matters: privilege is dropped before claims are published,
+      // so a failure between the two leaves the session with fewer rights,
+      // never more.
+      await conn.query(
+        options.readOnly
+          ? 'begin; set transaction read only; set local role authenticated'
+          : 'begin; set local role authenticated',
+      );
 
       const claims = {
         sub: context.userId,
         role: 'authenticated',
         ...(context.claims ?? {}),
       };
-      await conn.query(`select set_config('request.jwt.claims', $1, true)`, [
-        JSON.stringify(claims),
-      ]);
-      await conn.query(`select set_config('app.org_id', $1, true)`, [context.orgId ?? '']);
-      await conn.query(`select set_config('app.request_id', $1, true)`, [context.requestId ?? '']);
+
+      await conn.query(
+        `select set_config('request.jwt.claims', $1, true),
+                set_config('app.org_id', $2, true),
+                set_config('app.request_id', $3, true)`,
+        [JSON.stringify(claims), context.orgId ?? '', context.requestId ?? ''],
+      );
 
       const tx = new TxImpl(conn, context);
       const result = await fn(tx);
@@ -239,10 +252,13 @@ export async function withService<T>(
   });
 
   try {
-    await conn.query('begin');
-    await conn.query('set local role service_role');
-    await conn.query(`select set_config('app.org_id', $1, true)`, [ctx.orgId ?? '']);
-    await conn.query(`select set_config('app.request_id', $1, true)`, [ctx.requestId ?? '']);
+    // Batched for the same reason as withTenant above.
+    await conn.query('begin; set local role service_role');
+    await conn.query(
+      `select set_config('app.org_id', $1, true),
+              set_config('app.request_id', $2, true)`,
+      [ctx.orgId ?? '', ctx.requestId ?? ''],
+    );
     const result = await fn(new TxImpl(conn, ctx));
     await conn.query('commit');
     return result;
